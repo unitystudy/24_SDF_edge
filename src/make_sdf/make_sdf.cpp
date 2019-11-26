@@ -22,8 +22,11 @@ struct INIT_DATA{
 	const char *out_rgba;// 出力色ファイル名
 };
 
-struct RGBA8{
+struct RGBA8 {
 	unsigned char r, g, b, a;
+};
+struct RGBA32F {
+	float r, g, b, a;
 };
 
 float col2float(unsigned char c) {
@@ -37,20 +40,54 @@ void reduction(
 	const unsigned char *src, unsigned int src_w, unsigned int src_h, 
 	unsigned char *dest, unsigned int dest_w, unsigned int dest_h)
 {
-	RGBA8 *p = (RGBA8*)dest;
+	RGBA8 *d = (RGBA8*)dest;
 
+	// box filtering
 	for (unsigned int y = 0; y < dest_h; y++) {
-		unsigned int sy = y * src_h / dest_h;
-		const unsigned char *spy = src + 4 * sy * src_w;
+		unsigned int sy_min = y * src_h / dest_h;
+		unsigned int sy_max = (y + 1) * src_h / dest_h;
+		const unsigned char *spy = src + 4 * sy_min * src_w;
 		for (unsigned int x = 0; x < dest_w; x++) {
-			// point sampling
-			unsigned int sx = x * src_w / dest_w;
-			const unsigned char *sp = spy + 4 * sx;
-			p->r = sp[0];
-			p->g = sp[1];
-			p->b = sp[2];
-			p->a = sp[3];
-			p++;
+			unsigned int sx_min = x * src_w / dest_w;
+			unsigned int sx_max = (x + 1) * src_w / dest_w;
+			const unsigned char *spx = spy + 4 * sx_min;
+
+			RGBA32F col = { 0.0f, 0.0f, 0.0f, 0.0f };
+			const RGBA8 *p = (const RGBA8 *)spx;
+			for (unsigned int yy = sy_min; yy < sy_max; yy++) {
+				for (unsigned int xx = sx_min; xx < sx_max; xx++) {
+					float a = col2float(p->a);
+					col.a += a;
+					col.r += col2float(p->r) * a;
+					col.g += col2float(p->g) * a;
+					col.b += col2float(p->b) * a;
+					p++;
+				}
+				p += src_w - (sx_max - sx_min);
+			}
+
+			// 重み補正
+			assert(sy_min != sy_max);
+			assert(sx_min != sx_max);
+			float w_inv = 1.0f / (float)((sx_max - sx_min)*(sy_max - sy_min));
+			col.r *= w_inv;
+			col.g *= w_inv;
+			col.b *= w_inv;
+			col.a *= w_inv;
+
+			// 事前乗算アルファ補正
+			if (0.001 < col.a) {
+				col.r /= col.a;
+				col.g /= col.a;
+				col.b /= col.a;
+			}
+
+			// 出力
+			d->r = float2col(col.r);
+			d->g = float2col(col.g);
+			d->b = float2col(col.b);
+			d->a = float2col(col.a);
+			d++;
 		}
 	}
 }
