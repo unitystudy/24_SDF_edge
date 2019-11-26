@@ -328,3 +328,6 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+/make_sdf/dest.png
+/make_sdf/sdf.png
+/make_sdf/src.png
